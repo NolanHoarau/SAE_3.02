@@ -49,7 +49,7 @@ client.send(b"Salut le serveur !")
 client.close()
 ```
 - `connect()` : elle contient un tuple pour se connecter à une addresse/port d'un serveur
-- send(b"data") : envoie des données en binaire (octets)
+- `send(b"data")` : envoie des données en binaire (octets)
 
 Le module **socket** éhange des données sous forme d'octets (données binaires) et non de chaines de caractères donc on utilise `b"data"` pour envoyer des données binaire et la fonction `decode()` pour convertir ce message (en octets) en chaine de caractères (unicode).
 
