@@ -1,6 +1,6 @@
 ## Groupe
 
-Nom du groupe : Axolotl
+Nom du groupe : Axolotl \
 Participants :
 - HOARAU Nolan
 - RABAH Soumaya
