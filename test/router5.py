@@ -5,7 +5,7 @@ import time
 import sys
 
 # CONFIGURATION - CHANGEZ LE PORT POUR CHAQUE INSTANCE !
-ROUTER_PORT = 5001  # Changez à 5002, 5003, etc. pour d'autres routeurs
+ROUTER_PORT = 5005  # Changez à 5002, 5003, etc. pour d'autres routeurs
 MASTER_IP = "127.0.0.1"
 MASTER_PORT = 6000
 

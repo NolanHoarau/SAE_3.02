@@ -101,7 +101,7 @@ def register():
 # ---------- HANDLE MESSAGES ----------
 def handle_connection(conn, addr):
     try:
-        data = conn.recv(8192).decode()
+        data = conn.recv(1048576).decode()
         if not data or private_key is None:
             conn.close()
             return

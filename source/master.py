@@ -66,6 +66,45 @@ routers = []  # List of available routers
 users = {}    # Active users: username -> {ip, port, public_key, socket}
 online_users = {}  # For quick lookup
 
+# ---------- INIT ----------
+# Ajoutez cette fonction AVANT load_routers()
+def clear_database_tables():
+    """Clear all tables in the database on startup"""
+    db = get_db()
+    if db:
+        cur = db.cursor()
+        try:
+            # Récupérer toutes les tables de la base de données
+            cur.execute("SHOW TABLES")
+            tables = cur.fetchall()
+            
+            if tables:
+                print(f"[MASTER] 🧹 Clearing {len(tables)} tables...")
+                
+                # Désactiver les contraintes de clé étrangère temporairement
+                cur.execute("SET FOREIGN_KEY_CHECKS = 0")
+                
+                # Vider chaque table
+                for table in tables:
+                    table_name = table[0]
+                    cur.execute(f"TRUNCATE TABLE {table_name}")
+                    print(f"[MASTER]   Cleared table: {table_name}")
+                
+                # Réactiver les contraintes
+                cur.execute("SET FOREIGN_KEY_CHECKS = 1")
+                db.commit()
+                print(f"[MASTER] ✅ All tables cleared successfully")
+            else:
+                print(f"[MASTER] ℹ️  No tables found in database")
+                
+        except mariadb.Error as e:
+            print(f"[MASTER] ❌ Error clearing tables: {e}")
+            db.rollback()
+        finally:
+            db.close()
+    else:
+        print("[MASTER] ⚠️  Could not connect to database for cleanup")
+
 def load_routers():
     """Load routers from database at startup"""
     global routers
@@ -333,7 +372,10 @@ def main():
     print("\n" + "="*60)
     print("ONION ROUTING MASTER SERVER")
     print("="*60)
-    
+
+    # Effacer toutes les tables au démarrage
+    clear_database_tables()
+
     # Load routers from database
     load_routers()
     
