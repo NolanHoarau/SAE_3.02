@@ -1,4 +1,3 @@
-# client.py
 import socket
 import threading
 import time
@@ -16,94 +15,94 @@ class Client:
         self.running = False
         
     def register(self):
-        """Register with the master server"""
-        print("\n" + "="*60)
+        """Inscription avec le Master"""
+        print("\n", "="*60)
         print("CLIENT REGISTRATION")
         print("="*60)
         
-        # Get username
+        # Choix du nom
         self.username = input("Enter your username: ")
         
-        # Get and validate port
+        # Choix du port (7000 pour mieux se distinguer du master et des routeurs)
         while True:
             try:
-                self.port = int(input("Enter your listening port (e.g., 7001, 7002): "))
+                self.port = int(input("Enter your listening port (7001, 7002, ...): "))
                 
-                # Check if port is available
+                # Verifier si le port est disponible
                 try:
                     test_sock = socket.socket()
                     test_sock.bind(("127.0.0.1", self.port))
                     test_sock.close()
                     break
                 except OSError:
-                    print(f"❌ Port {self.port} is already in use. Please choose another.")
+                    print(f"X Port {self.port} is already in use. Please choose another.")
                     
             except ValueError:
-                print("❌ Please enter a valid number.")
+                print("X Please enter a valid number.")
         
-        print(f"\n🔗 Connecting to master at {MASTER_IP}:{MASTER_PORT}...")
+        print(f"\nConnecting to master at {MASTER_IP}:{MASTER_PORT}...")
         
         try:
-            # Connect to master
+            # Connexion au Master
             self.master_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.master_socket.settimeout(10.0)
             self.master_socket.connect((MASTER_IP, MASTER_PORT))
             
-            # Identify as client
+            # Identifier en tant que Client
             self.master_socket.send(b"CLIENT")
             time.sleep(0.1)  # Small delay
             
-            # Send registration data
+            # Envoie des donnees d'inscription
             reg_data = f"{self.username}::127.0.0.1::{self.port}"
             self.master_socket.send(reg_data.encode())
             
-            # Get response
+            # Reponse du Master
             response = self.master_socket.recv(1024).decode()
             
             if response.startswith("OK:"):
-                # Extract public key
+                # Extraire la cle publique
                 _, e_str, n_str = response.split(":")
                 self.public_key = (int(e_str), int(n_str))
                 
-                print(f"\n✅ Successfully registered as '{self.username}'")
-                print(f"   📍 Listening on port: {self.port}")
-                print(f"   🔑 Public key: ({e_str[:10]}..., {n_str[:10]}...)")
+                print(f"\nSuccessfully registered as '{self.username}'")
+                print(f"   Listening on port: {self.port}")
+                print(f"   Public key: ({e_str[:10]}..., {n_str[:10]}...)")
                 
-                # Remove timeout for normal operation
+                # Supprimer le delai d'attente
                 self.master_socket.settimeout(None)
                 return True
             else:
-                print(f"\n❌ Registration failed: {response}")
+                print(f"\nX Registration failed: {response}")
                 return False
                 
         except ConnectionRefusedError:
-            print("\n❌ Cannot connect to master server.")
+            print("\nX Cannot connect to master server.")
             print("   Make sure master.py is running on port 6000")
             return False
         except socket.timeout:
-            print("\n❌ Connection timeout.")
+            print("\nX Connection timeout.")
             print("   Master server is not responding")
             return False
         except Exception as e:
-            print(f"\n❌ Registration error: {type(e).__name__}: {e}")
+            print(f"\nX Registration error: {type(e).__name__}: {e}")
             return False
     
     def get_online_users(self):
-        """Get list of online users from master"""
+        """Liste des utilisateurs en ligne"""
         try:
             self.master_socket.send(b"LIST")
             response = self.master_socket.recv(1024).decode()
             
             if response.startswith("ONLINE:"):
                 users = response[7:].split(",")
-                # Filter out empty strings and self
+                # Filtre les chaines vides et self
                 return [u for u in users if u and u != self.username]
             return []
         except:
             return []
     
     def get_user_info(self, username):
-        """Get information about a specific user"""
+        """Recois les infromations d'un utilisateur"""
         try:
             self.master_socket.send(f"GET:{username}".encode())
             response = self.master_socket.recv(1024).decode()
@@ -121,27 +120,27 @@ class Client:
             return None
     
     def request_path(self, target_user, nb_layers):
-        """Request an onion routing path from master"""
+        """Demande d'un chemin de routage au Master"""
         try:
-            # Send path request
+            # Envoie d'une requete pour le chemin
             request = f"PATH:{self.username}:{nb_layers}:{target_user}"
             self.master_socket.send(request.encode())
             
-            # Get response
+            # Reponse
             response = self.master_socket.recv(4096).decode()
             
             if response.startswith("ERROR"):
-                print(f"   ❌ Path error: {response}")
+                print(f"   X Path error: {response}")
                 return None, None
             
             if "||" not in response:
-                print("   ❌ Invalid response format")
+                print("   X Invalid response format")
                 return None, None
             
-            # Parse response
+            # Separer les reponses
             path_part, target_part = response.split("||", 1)
             
-            # Parse routers in path
+            # Separer le chemin
             routers = []
             for hop in path_part.split("|"):
                 if hop:
@@ -152,7 +151,7 @@ class Client:
                         "pub_key": (int(e), int(n))
                     })
             
-            # Parse target information
+            # Separer les informations de la cible
             target_ip, target_port = target_part.split(";")
             target_info = {
                 "ip": target_ip,
@@ -162,89 +161,89 @@ class Client:
             return routers, target_info
             
         except Exception as e:
-            print(f"   ❌ Path request error: {e}")
+            print(f"   X Path request error: {e}")
             return None, None
     
     def encrypt_message(self, message, pub_key):
-        """Encrypt message using RSA"""
+        """Chiffrement du message avec RSA"""
         e, n = pub_key
         encrypted = []
         for char in message:
             try:
                 encrypted.append(pow(ord(char), e, n))
             except:
-                # Fallback for large numbers
+                # Solution pour des nombres trop grands
                 encrypted.append(ord(char) % n)
         return encrypted
     
     def build_onion(self, message, routers, target_info):
-        """Build onion-encrypted message"""
-        # Start with the final message
+        """Construction du chiffrement oignon du message"""
+        # Commencer avec le message final
         current = message
         
-        # Add layers from last to first router
+        # Ajout de couches du dernier au premier routeur
         for i in range(len(routers)-1, -1, -1):
             router = routers[i]
             
-            # Determine next hop
+            # Definir le prochain saut
             if i == len(routers)-1:
                 # Last router sends to target
                 next_hop = f"{target_info['ip']};{target_info['port']}"
             else:
-                # Router sends to next router
+                # Routeur envoie au prochain
                 next_router = routers[i+1]
                 next_hop = f"{next_router['ip']};{next_router['port']}"
             
-            # Create layer: next_hop|encrypted_data
+            # Creation couches: next_hop|encrypted_data
             layer = f"{next_hop}|{current}"
             
-            # Encrypt with router's public key
+            # Chiffrement avec la cle publique du routeur
             encrypted = self.encrypt_message(layer, router['pub_key'])
             current = ",".join(str(x) for x in encrypted)
         
         return current
     
     def send_message(self, target_user, message):
-        """Send a message to another user"""
-        print(f"\n✉️  Preparing message for '{target_user}'...")
+        """Envoie d'un message a un autre utilisateur"""
+        print(f"\nPreparing message for '{target_user}'...")
         
-        # Get target user info
-        print(f"   🔍 Looking up '{target_user}'...")
+        # Recevoir les infos du destinataire
+        print(f"   Looking up '{target_user}'...")
         user_info = self.get_user_info(target_user)
         
         if not user_info:
-            print(f"   ❌ User '{target_user}' not found or offline")
+            print(f"   X User '{target_user}' not found or offline")
             return
         
-        # Ask for number of router layers
+        # Demander pour le nombre de couches de chiffrement (nombre de routeurs)
         while True:
             try:
-                nb_layers = int(input(f"   🛣️  Number of router layers (1-3 recommended): "))
+                nb_layers = int(input(f"   Number of router layers (1-3 recommended): "))
                 if 1 <= nb_layers <= 5:
                     break
-                print("   ⚠️  Please enter a number between 1 and 5")
+                print("   /!\\ Please enter a number between 1 and 5")
             except ValueError:
-                print("   ⚠️  Please enter a valid number")
+                print("   /!\\ Please enter a valid number")
         
-        # Get routing path
-        print(f"   📡 Requesting path from master...")
+        # Recevoir le chemin de routage
+        print(f"   Requesting path from master...")
         routers, target_info = self.request_path(target_user, nb_layers)
         
         if not routers:
             return
         
-        print(f"   ✅ Path obtained: {len(routers)} routers")
+        print(f"   Path obtained: {len(routers)} routers")
         
-        # Build complete message with sender info
+        # Construction du message avec nos infos
         complete_message = f"{self.username}:{message}"
         
-        # Build onion
-        print(f"   🧅 Building onion encryption...")
+        # Construction de l'oignon
+        print(f"   Building onion encryption...")
         onion = self.build_onion(complete_message, routers, target_info)
         
-        # Send to first router
+        # Envoie au premier routeur
         first_router = routers[0]
-        print(f"   🚀 Sending to first router: {first_router['ip']}:{first_router['port']}")
+        print(f"   Sending to first router: {first_router['ip']}:{first_router['port']}")
         
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -252,46 +251,46 @@ class Client:
             sock.connect((first_router["ip"], first_router["port"]))
             sock.send(onion.encode())
             sock.close()
-            print(f"   ✅ Message sent successfully via {len(routers)} routers!")
+            print(f"   Message sent successfully via {len(routers)} routers!")
             
         except ConnectionRefusedError:
-            print(f"   ❌ Router {first_router['ip']}:{first_router['port']} not available")
+            print(f"   X Router {first_router['ip']}:{first_router['port']} not available")
         except socket.timeout:
-            print(f"   ❌ Router connection timeout")
+            print(f"   X Router connection timeout")
         except Exception as e:
-            print(f"   ❌ Send error: {e}")
+            print(f"   X Send error: {e}")
     
     def listen_for_messages(self):
-        """Listen for incoming messages on our port"""
+        """Ecoute pour les messages entrant sur notre port"""
         try:
             server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             server.bind(("127.0.0.1", self.port))
             server.listen(5)
             
-            print(f"\n📨 Message listener started on port {self.port}")
+            print(f"\nMessage listener started on port {self.port}")
             
             while self.running:
                 try:
                     conn, addr = server.accept()
                     
-                    # Receive message
+                    # Recois le message
                     data = conn.recv(8192).decode()
                     conn.close()
                     
                     if data:
-                        # Simple message display
+                        # Affichage du message
                         if ":" in data:
                             sender, message = data.split(":", 1)
-                            print(f"\n" + "="*50)
-                            print(f"📩 NEW MESSAGE FROM {sender}")
+                            print(f"\n", "="*50)
+                            print(f"NEW MESSAGE FROM {sender}")
                             print(f"{'='*50}")
                             print(f"{message}")
                             print(f"{'='*50}")
                         else:
-                            print(f"\n📩 Received: {data}")
+                            print(f"\nReceived: {data}")
                         
-                        # Show prompt again
+                        # Affichage de la console
                         sys.stdout.write("\n>> ")
                         sys.stdout.flush()
                         
@@ -299,36 +298,36 @@ class Client:
                     pass
                 
         except Exception as e:
-            print(f"\n❌ Listener error: {e}")
+            print(f"\nX Listener error: {e}")
         finally:
             if 'server' in locals():
                 server.close()
     
     def keep_alive(self):
-        """Send periodic pings to master to stay connected"""
+        """Envoie de pings constemment au Master pour garder la connexion"""
         while self.running:
             try:
                 if self.master_socket:
                     self.master_socket.send(b"PING")
                     response = self.master_socket.recv(1024)
                     if response != b"PONG":
-                        print("\n⚠️  Lost connection to master")
+                        print("\n/!\\ Lost connection to master")
                         self.running = False
             except:
-                print("\n⚠️  Master connection error")
+                print("\n/!\\ Master connection error")
                 self.running = False
             
-            time.sleep(30)  # Ping every 30 seconds
+            time.sleep(30)  # Ping toutes les 30 secondes
     
     def chat_interface(self):
-        """Main chat interface"""
+        """Interface messagerie"""
         self.running = True
         
-        # Start message listener thread
+        # Lancement du thread pour l'ecoute des messages entrant
         listener_thread = threading.Thread(target=self.listen_for_messages, daemon=True)
         listener_thread.start()
         
-        # Start keep-alive thread
+        # Lancement du thread pour garder la connexion
         ping_thread = threading.Thread(target=self.keep_alive, daemon=True)
         ping_thread.start()
         
@@ -352,7 +351,7 @@ class Client:
                 cmd = input().strip()
                 
                 if cmd == "/quit":
-                    print("\n👋 Goodbye!")
+                    print("\nGoodbye!")
                     self.running = False
                     if self.master_socket:
                         self.master_socket.send(b"QUIT")
@@ -362,11 +361,11 @@ class Client:
                 elif cmd == "/list":
                     users = self.get_online_users()
                     if users:
-                        print(f"\n👥 Online users ({len(users)}):")
+                        print(f"\nOnline users ({len(users)}):")
                         for user in users:
                             print(f"  • {user}")
                     else:
-                        print("\n📭 No other users online")
+                        print("\nNo other users online")
                     
                 elif cmd.startswith("/msg "):
                     parts = cmd.split(" ", 2)
@@ -375,34 +374,34 @@ class Client:
                         message = parts[2] if len(parts) > 2 else input("Message: ")
                         
                         if target == self.username:
-                            print("\n🤔 You cannot message yourself!")
+                            print("\n/!\\ You can't message yourself!")
                         elif not message.strip():
-                            print("\n⚠️  Message cannot be empty")
+                            print("\n/!\\ Message can't be empty")
                         else:
                             self.send_message(target, message)
                     else:
-                        print("\n⚠️  Usage: /msg <username> <message>")
+                        print("\n/!\\ Usage: /msg <username> <message>")
                         
                 elif cmd:
-                    print(f"\n⚠️  Unknown command: {cmd}")
+                    print(f"\n/!\\ Unknown command: {cmd}")
                     print("   Available: /list, /msg, /quit")
                     
             except KeyboardInterrupt:
-                print("\n\n⚠️  Interrupted. Type /quit to exit properly.")
+                print("\n\n/!\\ Interrupted. Type /quit to exit properly.")
             except Exception as e:
-                print(f"\n❌ Error: {e}")
+                print(f"\nX Error: {e}")
     
     def run(self):
-        """Main client function"""
+        """Fonction main"""
         if not self.register():
-            print("\n❌ Registration failed. Exiting.")
+            print("\nX Registration failed. Exiting.")
             return
         
         self.chat_interface()
-        print("\n✅ Client stopped.")
+        print("\nClient stopped.")
 
 if __name__ == "__main__":
-    print("\n" + "="*60)
+    print("\n", "="*60)
     print("ONION CHAT CLIENT")
     print("="*60)
     

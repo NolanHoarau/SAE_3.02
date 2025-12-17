@@ -1,4 +1,3 @@
-# master.py
 import socket
 import threading
 import random
@@ -18,7 +17,7 @@ DB_CONFIG = {
 
 # ---------- RSA ----------
 def generate_keys():
-    """Generate RSA public/private key pair"""
+    """Generer cle RSA publique/privee"""
     p = 0
     q = 0
     while not is_prime(p):
@@ -37,7 +36,7 @@ def generate_keys():
     return (e, n), (d, n)
 
 def is_prime(n):
-    """Check if a number is prime"""
+    """Verifier si un nombre est premier"""
     if n <= 1:
         return False
     if n <= 3:
@@ -53,35 +52,34 @@ def is_prime(n):
 
 # ---------- CONNEXION BDD ----------
 def get_db():
-    """Get database connection"""
+    """Se connecter a la base de donnee"""
     try:
         conn = mariadb.connect(**DB_CONFIG)
         return conn
     except mariadb.Error as e:
-        print(f"[MASTER] ❌ Database Error: {e}")
+        print(f"[MASTER] X Database Error: {e}")
         return None
 
 # ---------- INIT ----------
-routers = []  # List of available routers
-users = {}    # Active users: username -> {ip, port, public_key, socket}
-online_users = {}  # For quick lookup
+routers = []  # Liste des routeurs disponible
+users = {}    # Utilisateurs actif : nom -> {ip, port, public_key, socket}
+online_users = {}
 
 # ---------- INIT ----------
-# Ajoutez cette fonction AVANT load_routers()
 def clear_database_tables():
-    """Clear all tables in the database on startup"""
+    """Nettoyer toutes les tables dans la base de donnees au lancement"""
     db = get_db()
     if db:
         cur = db.cursor()
         try:
-            # Récupérer toutes les tables de la base de données
+            # Recuperer toutes les tables de la base de donnees
             cur.execute("SHOW TABLES")
             tables = cur.fetchall()
             
             if tables:
-                print(f"[MASTER] 🧹 Clearing {len(tables)} tables...")
+                print(f"[MASTER] Clearing {len(tables)} tables...")
                 
-                # Désactiver les contraintes de clé étrangère temporairement
+                # Desactiver les contraintes de cle etrangere temporairement
                 cur.execute("SET FOREIGN_KEY_CHECKS = 0")
                 
                 # Vider chaque table
@@ -90,51 +88,26 @@ def clear_database_tables():
                     cur.execute(f"TRUNCATE TABLE {table_name}")
                     print(f"[MASTER]   Cleared table: {table_name}")
                 
-                # Réactiver les contraintes
+                # Reactiver les contraintes
                 cur.execute("SET FOREIGN_KEY_CHECKS = 1")
                 db.commit()
-                print(f"[MASTER] ✅ All tables cleared successfully")
+                print(f"[MASTER] All tables cleared successfully")
             else:
-                print(f"[MASTER] ℹ️  No tables found in database")
+                print(f"[MASTER] No tables found in database")
                 
         except mariadb.Error as e:
-            print(f"[MASTER] ❌ Error clearing tables: {e}")
+            print(f"[MASTER] X Error clearing tables: {e}")
             db.rollback()
         finally:
             db.close()
     else:
-        print("[MASTER] ⚠️  Could not connect to database for cleanup")
-
-def load_routers():
-    """Load routers from database at startup"""
-    global routers
-    db = get_db()
-    if db:
-        cur = db.cursor()
-        try:
-            cur.execute("SELECT id, ip, port, e, n, d FROM routers")
-            for r in cur.fetchall():
-                routers.append({
-                    "id": r[0],
-                    "ip": r[1],
-                    "port": r[2],
-                    "e": r[3],
-                    "n": r[4],
-                    "d": r[5]
-                })
-            print(f"[MASTER] 📊 {len(routers)} routers loaded from database")
-        except mariadb.Error as e:
-            print(f"[MASTER] ℹ️  No routers in database yet (first run)")
-        finally:
-            db.close()
-    else:
-        print("[MASTER] ⚠️  Could not connect to database")
+        print("[MASTER] /!\\ Could not connect to database for cleanup")
 
 # ---------- HANDLERS ----------
 def handle_router(conn):
-    """Handle router registration"""
+    """Gerer l'enregistrement des routeurs"""
     try:
-        # Receive router information
+        # Recevoir les infos du routeur
         data = conn.recv(1024).decode().strip()
         print(f"[MASTER] Router registration: {data}")
         
@@ -142,12 +115,12 @@ def handle_router(conn):
             ip, port = data.split(";")
             port = int(port)
 
-            # Generate RSA keys for this router
+            # Generation de cles RSA pour ce routeur
             pub, priv = generate_keys()
             e, n = pub
             d, _ = priv
 
-            # Save to database
+            # Sauvegarde sur la base de donnee
             db = get_db()
             if db:
                 cur = db.cursor()
@@ -159,7 +132,7 @@ def handle_router(conn):
                 db.commit()
                 db.close()
 
-                # Add to active routers list
+                # Ajout des infos dans la liste routers
                 router_info = {
                     "id": router_id,
                     "ip": ip,
@@ -170,30 +143,30 @@ def handle_router(conn):
                 }
                 routers.append(router_info)
 
-                # Send private key to router
+                # Envoyer cle privee au routeur
                 response = f"{d};{n}"
                 conn.send(response.encode())
-                print(f"[MASTER] ✅ Router {ip}:{port} registered (ID: {router_id})")
+                print(f"[MASTER] Router {ip}:{port} registered (ID: {router_id})")
             else:
                 conn.send(b"ERROR:DB_CONNECTION")
         else:
             conn.send(b"ERROR:INVALID_FORMAT")
             
     except Exception as e:
-        print(f"[MASTER] ❌ Router handler error: {e}")
+        print(f"[MASTER] X Router handler error: {e}")
         conn.send(b"ERROR:INTERNAL")
     finally:
         conn.close()
 
 def handle_client(conn):
-    """Handle client connection and registration"""
+    """Gerer la connexion et l'enregistrement du Client"""
     username = None
     
     try:
-        # Set initial timeout for registration
+        # Mettre un delai de depassement pour l'enregistrement
         conn.settimeout(10.0)
         
-        # Receive client registration data
+        # Recevoir les donnees d'enregistrement du client
         data = conn.recv(1024).decode().strip()
         print(f"[MASTER] Client registration: {data}")
         
@@ -204,11 +177,11 @@ def handle_client(conn):
                 ip = parts[1]
                 port = int(parts[2])
                 
-                # Generate RSA keys for user
+                # Generation des cles RSA pour les utilisateurs
                 pub, _ = generate_keys()
                 e, n = pub
                 
-                # Save user to database
+                # Sauvegarder les utilisateurs dans la base de donnee
                 db = get_db()
                 if not db:
                     conn.send(b"ERROR:DB_CONNECTION")
@@ -217,10 +190,10 @@ def handle_client(conn):
                 
                 cur = db.cursor()
                 
-                # Check if user already exists
+                # Verifier si l'utilisateur exciste deja
                 cur.execute("SELECT username FROM users WHERE username = ?", (username,))
                 if cur.fetchone():
-                    # Update existing user
+                    # Misse a jour de l'utilisateur existant
                     cur.execute("""
                         UPDATE users SET 
                         ip=?, port=?, public_key_e=?, public_key_n=?, is_online=TRUE,
@@ -228,7 +201,7 @@ def handle_client(conn):
                         WHERE username=?
                     """, (ip, port, e, n, username))
                 else:
-                    # Insert new user
+                    # Ajout du nouvel utilisateur
                     cur.execute("""
                         INSERT INTO users 
                         (username, ip, port, public_key_e, public_key_n, is_online)
@@ -238,7 +211,7 @@ def handle_client(conn):
                 db.commit()
                 db.close()
                 
-                # Store in memory
+                # Stocker dans la memoire
                 users[username] = {
                     "ip": ip,
                     "port": port,
@@ -247,38 +220,39 @@ def handle_client(conn):
                 }
                 online_users[username] = True
                 
-                # Send success response with public key
+                # Envoie du succes avec la cle publique
                 response = f"OK:{e}:{n}"
                 conn.send(response.encode())
-                print(f"[MASTER] ✅ User '{username}' registered at {ip}:{port}")
+                print(f"[MASTER] User '{username}' registered at {ip}:{port}")
                 
-                # Remove timeout for command loop
+                # Supprimer le delais de depassement pour les commandes en boucles
                 conn.settimeout(None)
                 
-                # Command loop
+                # Commandes en boucle
                 try:
+                    print("\n")
                     while True:
                         cmd_data = conn.recv(1024).decode().strip()
                         
-                        # Check if client disconnected
+                        # Verifier si le client est deconnecte
                         if not cmd_data:
-                            print(f"[MASTER] 📤 Client '{username}' disconnected")
+                            print(f"[MASTER] Client '{username}' disconnected")
                             break
                         
-                        # Handle commands
+                        # Gerer les commandes
                         if cmd_data == "QUIT":
-                            print(f"[MASTER] 👋 Client '{username}' quit")
+                            print(f"[MASTER] Client '{username}' quit")
                             break
                             
                         elif cmd_data == "LIST":
-                            # List online users
+                            # Liste des utilisateurs en ligne
                             user_list = list(users.keys())
                             response = f"ONLINE:{','.join(user_list)}"
                             conn.send(response.encode())
                             print(f"[MASTER] Sent user list to '{username}'")
                             
                         elif cmd_data.startswith("GET:"):
-                            # Get user info
+                            # Recevoir les infos de l'utilisateur
                             target = cmd_data[4:]
                             if target in users:
                                 info = users[target]
@@ -289,17 +263,17 @@ def handle_client(conn):
                             conn.send(response.encode())
                             
                         elif cmd_data.startswith("PATH:"):
-                            # Request path for onion routing
+                            # Demander le chemin pour le routage en oignon
                             # Format: PATH:sender:layers:target
                             _, sender, layers_str, target = cmd_data.split(":", 3)
                             layers = int(layers_str)
                             
-                            # Validate target
+                            # Valider la cible
                             if target not in users:
                                 conn.send(b"ERROR:TARGET_NOT_FOUND")
                                 continue
                                 
-                            # Validate layers
+                            # Valider les couches
                             if layers > len(routers):
                                 layers = len(routers)
                                 
@@ -307,35 +281,35 @@ def handle_client(conn):
                                 conn.send(b"ERROR:NO_ROUTERS_AVAILABLE")
                                 continue
                             
-                            # Create random path through routers
+                            # Creer un chemin aleatoire de routeurs
                             path_routers = random.sample(routers, layers)
                             target_info = users[target]
                             
-                            # Build path string
+                            # Creation du chemin en chaine de caractere
                             path_str = "|".join([
                                 f"{r['ip']};{r['port']};{r['e']};{r['n']}" 
                                 for r in path_routers
                             ])
                             
-                            # Build target info
+                            # Creation des infos de la cible
                             target_str = f"{target_info['ip']};{target_info['port']}"
                             
-                            # Send complete response
+                            # Envoie la reponse complete
                             response = f"{path_str}||{target_str}"
                             conn.send(response.encode())
-                            print(f"[MASTER] 🛣️  Path created: {sender} -> {target} ({layers} hops)")
+                            print(f"[MASTER] Path created: {sender} -> {target} ({layers} hops)")
                             
                         elif cmd_data == "PING":
-                            # Keep-alive ping
+                            # ping pour garder la connexion
                             conn.send(b"PONG")
                             
                         else:
                             conn.send(b"ERROR:UNKNOWN_COMMAND")
                             
                 except ConnectionResetError:
-                    print(f"[MASTER] 🔌 Client '{username}' connection reset")
+                    print(f"[MASTER] Client '{username}' connection reset")
                 except Exception as e:
-                    print(f"[MASTER] ❌ Command error for '{username}': {type(e).__name__}")
+                    print(f"[MASTER] X Command error for '{username}': {type(e).__name__}")
                 
             else:
                 conn.send(b"ERROR:INVALID_DATA")
@@ -343,17 +317,17 @@ def handle_client(conn):
             conn.send(b"ERROR:INVALID_FORMAT")
             
     except socket.timeout:
-        print(f"[MASTER] ⏰ Registration timeout for client")
+        print(f"[MASTER] Registration timeout for client")
     except Exception as e:
-        print(f"[MASTER] ❌ Client handler error: {type(e).__name__}: {e}")
+        print(f"[MASTER] X Client handler error: {type(e).__name__}: {e}")
     finally:
-        # Cleanup
+        # Nettoyage des utilisateurs
         if username and username in users:
             del users[username]
         if username and username in online_users:
             del online_users[username]
         
-        # Update database
+        # Mise a jour de la base de donnee
         if username:
             db = get_db()
             if db:
@@ -364,22 +338,19 @@ def handle_client(conn):
         
         conn.close()
         if username:
-            print(f"[MASTER] 🧹 Cleaned up client '{username}'")
+            print(f"[MASTER] Cleaned up client '{username}'")
 
 # ---------- MAIN SERVER ----------
 def main():
-    """Main server function"""
+    """fonction main du Master"""
     print("\n" + "="*60)
     print("ONION ROUTING MASTER SERVER")
     print("="*60)
 
-    # Effacer toutes les tables au démarrage
+    # Effacer toutes les tables au demarrage
     clear_database_tables()
-
-    # Load routers from database
-    load_routers()
     
-    # Try different ports if needed
+    # Essayer differents ports si besoin
     ports_to_try = [6000, 6001, 6002, 7000]
     server = None
     
@@ -390,60 +361,60 @@ def main():
             server.bind(("127.0.0.1", port))
             server.listen(10)
             
-            print(f"\n[MASTER] ✅ Server started on 127.0.0.1:{port}")
-            print(f"[MASTER] 📊 Available routers: {len(routers)}")
-            print(f"[MASTER] 👤 Online users: {len(users)}")
-            print(f"[MASTER] 📡 Waiting for connections...")
+            print(f"\n[MASTER] Server started on 127.0.0.1:{port}")
+            print(f"[MASTER] Available routers: {len(routers)}")
+            print(f"[MASTER] Online users: {len(users)}")
+            print(f"[MASTER] Waiting for connections...")
             print("-" * 60)
             break
             
         except OSError as e:
             if port == ports_to_try[-1]:
-                print(f"\n[MASTER] ❌ Could not bind to any port")
+                print(f"\n[MASTER] X Could not bind to any port")
                 print(f"[MASTER] Error: {e}")
                 print("[MASTER] Try: sudo kill $(sudo lsof -t -i:6000-7000)")
                 sys.exit(1)
-            print(f"[MASTER] ⚠️  Port {port} busy, trying next...")
+            print(f"[MASTER] /!\\ Port {port} busy, trying next...")
             continue
     
-    # Main accept loop
+    # Boucle d'approbation
     while True:
         try:
             conn, addr = server.accept()
-            print(f"\n[MASTER] 🔗 New connection from {addr}")
+            print(f"\n[MASTER] New connection from {addr}")
             
-            # Get connection type with timeout
+            # Recevoir le type de connexion a vec delais de depassement
             conn.settimeout(5.0)
             try:
                 typ_data = conn.recv(10).decode().strip()
                 print(f"[MASTER] Connection type: {typ_data}")
                 
                 if typ_data == "ROUTER":
-                    print(f"[MASTER] 🚦 New router from {addr}")
+                    print(f"[MASTER] New router from {addr}")
                     threading.Thread(target=handle_router, args=(conn,), daemon=True).start()
                 elif typ_data == "CLIENT":
-                    print(f"[MASTER] 👤 New client from {addr}")
+                    print(f"[MASTER] New client from {addr}")
                     threading.Thread(target=handle_client, args=(conn,), daemon=True).start()
                 else:
-                    print(f"[MASTER] ❓ Unknown type: {typ_data}")
+                    print(f"[MASTER] ? Unknown type: {typ_data}")
                     conn.send(b"ERROR:UNKNOWN_TYPE")
                     conn.close()
                     
             except socket.timeout:
-                print(f"[MASTER] ⏰ Connection timeout from {addr}")
+                print(f"[MASTER] Connection timeout from {addr}")
                 conn.close()
                 
         except KeyboardInterrupt:
-            print("\n\n[MASTER] 🛑 Shutdown requested...")
+            print("\n\n[MASTER] Shutdown requested...")
             break
         except Exception as e:
-            print(f"[MASTER] ❌ Accept error: {type(e).__name__}: {e}")
+            print(f"[MASTER] X Accept error: {type(e).__name__}: {e}")
             continue
     
-    # Clean shutdown
+    # Fermeture propre
     if server:
         server.close()
-    print("[MASTER] 👋 Server stopped")
+    print("[MASTER] Server stopped")
 
 if __name__ == "__main__":
     main()

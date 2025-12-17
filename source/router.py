@@ -1,10 +1,9 @@
-# router.py - VERSION CORRIGÉE
 import socket
 import threading
 import time
 import sys
 
-# CONFIGURATION - CHANGEZ LE PORT POUR CHAQUE INSTANCE !
+# Configuration
 ROUTER_PORT = 5001  # Changez à 5002, 5003, etc. pour d'autres routeurs
 MASTER_IP = "127.0.0.1"
 MASTER_PORT = 6000
@@ -19,7 +18,7 @@ def decrypt(cipher_list, priv_key):
     decrypted = []
     for c in cipher_list:
         try:
-            # Pour éviter les erreurs avec des grands nombres
+            # Pour eviter les erreurs avec des grands nombres
             char_code = pow(c, d, n)
             if char_code < 0 or char_code > 1114111:  # Plage Unicode
                 char_code = char_code % 256
@@ -49,59 +48,59 @@ def register():
             address_msg = f"127.0.0.1;{ROUTER_PORT}"
             sock.send(address_msg.encode())
             
-            # Recevoir la clé privée
+            # Recevoir la cle privee
             data = sock.recv(1024).decode().strip()
             
             if not data:
-                print(f"[ROUTER] ❌ Empty response from master (attempt {attempt + 1}/{max_retries})")
+                print(f"[ROUTER] X Empty response from master (attempt {attempt + 1}/{max_retries})")
                 sock.close()
                 time.sleep(2)
                 continue
                 
             if data.startswith("ERROR"):
-                print(f"[ROUTER] ❌ Master error: {data}")
+                print(f"[ROUTER] X Master error: {data}")
                 sock.close()
                 return False
             
-            # Parser la clé privée
+            # Parser la cle privee
             if ";" in data:
                 d_str, n_str = data.split(";")
                 private_key = (int(d_str), int(n_str))
                 sock.close()
                 
-                print(f"[ROUTER] ✅ Registered successfully!")
+                print(f"[ROUTER] Registered successfully!")
                 print(f"[ROUTER]   Port: {ROUTER_PORT}")
                 print(f"[ROUTER]   Private key received")
                 return True
             else:
-                print(f"[ROUTER] ❌ Invalid response format: {data}")
+                print(f"[ROUTER] X Invalid response format: {data}")
                 sock.close()
                 
         except ConnectionRefusedError:
-            print(f"[ROUTER] ❌ Master not available (attempt {attempt + 1}/{max_retries})")
+            print(f"[ROUTER] X Master not available (attempt {attempt + 1}/{max_retries})")
             print(f"[ROUTER]   Make sure master.py is running on port {MASTER_PORT}")
             time.sleep(3)
             
         except ConnectionResetError:
-            print(f"[ROUTER] ❌ Connection reset by master (attempt {attempt + 1}/{max_retries})")
+            print(f"[ROUTER] X Connection reset by master (attempt {attempt + 1}/{max_retries})")
             print(f"[ROUTER]   Master might be rejecting connections")
             time.sleep(3)
             
         except socket.timeout:
-            print(f"[ROUTER] ❌ Connection timeout (attempt {attempt + 1}/{max_retries})")
+            print(f"[ROUTER] X Connection timeout (attempt {attempt + 1}/{max_retries})")
             time.sleep(3)
             
         except Exception as e:
-            print(f"[ROUTER] ❌ Error: {type(e).__name__}: {e}")
+            print(f"[ROUTER] X Error: {type(e).__name__}: {e}")
             time.sleep(3)
     
-    print("[ROUTER] ❌ Failed to register after all attempts")
+    print("[ROUTER] X Failed to register after all attempts")
     return False
 
 # ---------- HANDLE MESSAGES ----------
 def handle_connection(conn, addr):
     try:
-        data = conn.recv(1048576).decode()
+        data = conn.recv(1048576).decode() # Un tres grand nombre (2^20) pour que tout le message soit recu
         if not data or private_key is None:
             conn.close()
             return
@@ -124,7 +123,7 @@ def handle_connection(conn, addr):
             conn.close()
             return
         
-        # Déchiffrer
+        # Dechiffrer
         plain = decrypt(cipher_list, private_key)
         
         if not plain:
@@ -152,26 +151,26 @@ def handle_connection(conn, addr):
                     forward_sock.send(payload.encode())
                     forward_sock.close()
                     
-                    print(f"[ROUTER] ✅ Forwarded successfully")
+                    print(f"[ROUTER] Forwarded successfully")
                     
                 except ValueError:
-                    print(f"[ROUTER] ❌ Invalid port: {next_port_str}")
+                    print(f"[ROUTER] X Invalid port: {next_port_str}")
                 except ConnectionRefusedError:
-                    print(f"[ROUTER] ❌ Next hop {next_ip}:{next_port} refused connection")
+                    print(f"[ROUTER] X Next hop {next_ip}:{next_port} refused connection")
                 except Exception as e:
-                    print(f"[ROUTER] ❌ Forward error: {type(e).__name__}: {e}")
+                    print(f"[ROUTER] X Forward error: {type(e).__name__}: {e}")
             else:
                 # Message final
-                print(f"[ROUTER] 📨 Final message: {payload[:100]}...")
+                print(f"[ROUTER] Final message: {payload[:100]}...")
         else:
-            print(f"[ROUTER] 📨 Received: {plain[:100]}...")
+            print(f"[ROUTER] Received: {plain[:100]}...")
             
     except Exception as e:
-        print(f"[ROUTER] ❌ Handler error: {type(e).__name__}: {e}")
+        print(f"[ROUTER] X Handler error: {type(e).__name__}: {e}")
     finally:
         conn.close()
 
-# ---------- SERVEUR ----------
+# ---------- SERVER ----------
 def start_server():
     try:
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -179,15 +178,15 @@ def start_server():
         server.bind(("127.0.0.1", ROUTER_PORT))
         server.listen(5)
         
-        print(f"[ROUTER] ✅ Listening on port {ROUTER_PORT}")
-        print("[ROUTER] ⏳ Waiting for messages...")
+        print(f"[ROUTER] Listening on port {ROUTER_PORT}")
+        print("[ROUTER] Waiting for messages...")
         
         while True:
             conn, addr = server.accept()
             threading.Thread(target=handle_connection, args=(conn, addr), daemon=True).start()
             
     except Exception as e:
-        print(f"[ROUTER] ❌ Server error: {type(e).__name__}: {e}")
+        print(f"[ROUTER] X Server error: {type(e).__name__}: {e}")
         return False
     return True
 
@@ -197,24 +196,24 @@ def main():
     print(f"ROUTER ON PORT {ROUTER_PORT}")
     print(f"{'='*50}")
     
-    # Vérifier que le port n'est pas déjà utilisé
+    # Verifier que le port n'est pas deja utilise
     try:
         test_sock = socket.socket()
         test_sock.bind(("127.0.0.1", ROUTER_PORT))
         test_sock.close()
     except OSError:
-        print(f"[ROUTER] ❌ Port {ROUTER_PORT} is already in use!")
+        print(f"[ROUTER] X Port {ROUTER_PORT} is already in use!")
         print(f"[ROUTER]   Try changing ROUTER_PORT in the code")
         sys.exit(1)
     
-    # S'enregistrer auprès du master
+    # S'enregistrer aupres du master
     if not register():
-        print("[ROUTER] ❌ Cannot continue without registration")
+        print("[ROUTER] X Cannot continue without registration")
         sys.exit(1)
     
-    # Démarrer le serveur
+    # Demarrer le serveur
     if not start_server():
-        print("[ROUTER] ❌ Server failed to start")
+        print("[ROUTER] X Server failed to start")
         sys.exit(1)
 
 if __name__ == "__main__":
