@@ -400,10 +400,55 @@ class Client:
         self.chat_interface()
         print("\nClient stopped.")
 
-if __name__ == "__main__":
-    print("\n", "="*60)
+def run_gui():
+    """Lance l'interface graphique"""
+    try:
+        # Import et lancement de l'interface graphique
+        from client_gui import main as gui_main
+        print("\n" + "="*60)
+        print("LANCEMENT DE L'INTERFACE GRAPHIQUE")
+        print("="*60)
+        gui_main()
+    except ImportError as e:
+        print(f"\nX Erreur: Impossible d'importer l'interface graphique")
+        print(f"   Vérifiez que PyQt6 est installé: pip install PyQt6")
+        print(f"   Détail: {e}")
+        return False
+    except Exception as e:
+        print(f"\nX Erreur lors du lancement de l'interface graphique: {e}")
+        return False
+    return True
+
+def main():
+    """Fonction principale qui demande le mode d'interface"""
+    print("\n" + "="*60)
     print("ONION CHAT CLIENT")
     print("="*60)
     
-    client = Client()
-    client.run()
+    while True:
+        print("\nChoisissez le mode d'interface:")
+        print("  1. Interface graphique (GUI)")
+        print("  2. Interface en ligne de commande (CLI)")
+        print("  3. Quitter")
+        
+        choice = input("\nVotre choix (1-3): ").strip()
+        
+        if choice == "1":
+            # Lancer l'interface graphique
+            run_gui()
+            # Après fermeture de l'interface graphique, revenir au menu
+            continue
+        elif choice == "2":
+            # Lancer l'interface en ligne de commande
+            client = Client()
+            client.run()
+            # Après fermeture du client CLI, revenir au menu
+            continue
+        elif choice == "3":
+            print("\nAu revoir!")
+            break
+        else:
+            print("\n/!\\ Choix invalide. Veuillez choisir 1, 2 ou 3.")
+
+if __name__ == "__main__":
+    main()
