@@ -1,10 +1,3 @@
-#!/usr/bin/env python3
-"""
-Master Server pour Onion Routing
-Mode shell ou interface graphique selon le choix au démarrage
-Utilise PyQt6 pour le mode graphique
-"""
-
 import sys
 import socket
 import threading
@@ -19,7 +12,7 @@ try:
     from PyQt6.QtWidgets import (
         QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
         QLabel, QTextEdit, QTableWidget, QTableWidgetItem, QTabWidget,
-        QHeaderView, QMessageBox
+        QHeaderView, QMessageBox, QDialog, QLineEdit, QPushButton
     )
     from PyQt6.QtCore import Qt, pyqtSignal, QObject, QTimer
     from PyQt6.QtGui import QFont, QColor
@@ -122,13 +115,14 @@ def clear_database_tables():
 class MasterServer:
     """Gestion du serveur Master"""
     
-    def __init__(self, gui_mode=False):
+    def __init__(self, gui_mode=False, host="127.0.0.1", port=6000):
         self.routers = []
         self.users = {}
         self.online_users = {}
         self.server = None
         self.running = False
-        self.port = None
+        self.port = port
+        self.host = host
         self.gui_mode = gui_mode
         
         if gui_mode and PYQT_AVAILABLE:
@@ -185,8 +179,8 @@ class MasterServer:
                     }
                     self.routers.append(router_info)
                     
-                    # Envoyer clé privée au routeur
-                    response = f"{d};{n}"
+                    # Envoyer ID;d;n au routeur
+                    response = f"{router_id};{d};{n}"
                     conn.send(response.encode())
                     
                     self.log(f"Router {ip}:{port} registered (ID: {router_id})")
@@ -199,6 +193,39 @@ class MasterServer:
                 conn.send(b"ERROR:INVALID_FORMAT")
         except Exception as e:
             self.log(f"X Router handler error: {e}")
+            conn.send(b"ERROR:INTERNAL")
+        finally:
+            conn.close()
+    
+    def handle_unregister_router(self, conn):
+        """Gérer la désinscription des routeurs"""
+        try:
+            data = conn.recv(1024).decode().strip()
+            router_id = int(data)
+            
+            self.log(f"Router unregister request: ID {router_id}")
+            
+            # Supprimer de la liste en mémoire
+            self.routers = [r for r in self.routers if r["id"] != router_id]
+            
+            # Supprimer de la BDD
+            db = get_db()
+            if db:
+                cur = db.cursor()
+                cur.execute("DELETE FROM routers WHERE id = ?", (router_id,))
+                db.commit()
+                db.close()
+                
+                conn.send(b"OK")
+                self.log(f"Router ID {router_id} unregistered successfully")
+                
+                if self.gui_mode and self.signals:
+                    self.signals.router_disconnected.emit(router_id)
+            else:
+                conn.send(b"ERROR:DB_CONNECTION")
+                
+        except Exception as e:
+            self.log(f"X Unregister router error: {e}")
             conn.send(b"ERROR:INTERNAL")
         finally:
             conn.close()
@@ -353,20 +380,33 @@ class MasterServer:
                 self.log(f"Cleaned up client '{username}'")
             conn.close()
             
-    def start(self):
+    def start(self, host=None, port=None):
         """Démarrer le serveur Master"""
         self.running = True
+        
+        # Utiliser les nouveaux paramètres si fournis
+        if host:
+            self.host = host
+        if port:
+            self.port = port
+        
         clear_database_tables()
         
-        ports_to_try = [6000, 6001, 6002, 7000]
+        # Si le port est spécifié, essayer uniquement ce port
+        if hasattr(self, 'chosen_port') and self.chosen_port:
+            ports_to_try = [self.chosen_port]
+        else:
+            # Essayer plusieurs ports par défaut
+            ports_to_try = [self.port, 6000, 6001, 6002, 7000]
+        
         for port in ports_to_try:
             try:
                 self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 self.server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                self.server.bind(("127.0.0.1", port))
+                self.server.bind((self.host, port))
                 self.server.listen(10)
                 self.port = port
-                self.log(f"Server started on 127.0.0.1:{port}")
+                self.log(f"Server started on {self.host}:{port}")
                 self.log(f"Available routers: {len(self.routers)}")
                 self.log(f"Online users: {len(self.users)}")
                 self.log("Waiting for connections...")
@@ -374,7 +414,7 @@ class MasterServer:
                 break
             except OSError as e:
                 if port == ports_to_try[-1]:
-                    self.log("X Could not bind to any port")
+                    self.log(f"X Could not bind to {self.host}:{port}")
                     self.log(f"Error: {e}")
                     print("[MASTER] Try: sudo kill $(sudo lsof -t -i:6000-7000)")
                     return False
@@ -394,7 +434,7 @@ class MasterServer:
                 
                 conn.settimeout(5.0)
                 try:
-                    typ_data = conn.recv(10).decode().strip()
+                    typ_data = conn.recv(32).decode().strip()
                     self.log(f"Connection type: {typ_data}")
                     
                     if typ_data == "ROUTER":
@@ -403,6 +443,9 @@ class MasterServer:
                     elif typ_data == "CLIENT":
                         self.log(f"New client from {addr}")
                         threading.Thread(target=self.handle_client, args=(conn,), daemon=True).start()
+                    elif typ_data == "UNREGISTER_ROUTER":
+                        self.log(f"Router unregister request from {addr}")
+                        threading.Thread(target=self.handle_unregister_router, args=(conn,), daemon=True).start()
                     else:
                         self.log(f"? Unknown type: {typ_data}")
                         conn.send(b"ERROR:UNKNOWN_TYPE")
@@ -435,6 +478,7 @@ if PYQT_AVAILABLE:
             self.master.signals.router_connected.connect(self.add_router)
             self.master.signals.client_connected.connect(self.add_client)
             self.master.signals.client_disconnected.connect(self.remove_client)
+            self.master.signals.router_disconnected.connect(self.remove_router)
             
             self.init_ui()
             
@@ -444,7 +488,7 @@ if PYQT_AVAILABLE:
             self.timer.start(2000)  # Toutes les 2 secondes
             
         def init_ui(self):
-            self.setWindowTitle("🧅 Onion Routing - Master Server")
+            self.setWindowTitle(f"🧅 Onion Routing - Master Server {self.master.host}:{self.master.port}")
             self.setGeometry(100, 100, 1200, 700)
             
             # Style identique au client
@@ -514,7 +558,7 @@ if PYQT_AVAILABLE:
             main_layout.setContentsMargins(15, 15, 15, 15)
             
             # En-tête
-            header = QLabel("🧅 ONION ROUTING - MASTER SERVER")
+            header = QLabel(f"🧅 ONION ROUTING - MASTER SERVER ({self.master.host}:{self.master.port})")
             header.setStyleSheet("font-size: 20px; font-weight: bold; color: #89b4fa;")
             header.setAlignment(Qt.AlignmentFlag.AlignCenter)
             main_layout.addWidget(header)
@@ -559,7 +603,7 @@ if PYQT_AVAILABLE:
             master_label.setStyleSheet("font-weight: bold; font-size: 14px;")
             master_layout.addWidget(master_label)
             
-            self.master_info = QLabel("127.0.0.1:6000")
+            self.master_info = QLabel(f"{self.master.host}:{self.master.port}")
             self.master_info.setStyleSheet("font-size: 14px; color: #89b4fa;")
             master_layout.addWidget(self.master_info)
             
@@ -568,6 +612,22 @@ if PYQT_AVAILABLE:
             master_layout.addWidget(self.master_status)
             
             master_layout.addStretch()
+            
+            # Bouton d'arrêt
+            stop_btn = QPushButton("Arrêter le serveur")
+            stop_btn.setFixedWidth(150)
+            stop_btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #f38ba8;
+                    color: #1e1e2e;
+                }
+                QPushButton:hover {
+                    background-color: #eba0ac;
+                }
+            """)
+            stop_btn.clicked.connect(self.stop_server)
+            master_layout.addWidget(stop_btn)
+            
             layout.addWidget(master_group)
             
             # Layout horizontal pour les deux tables côte à côte
@@ -666,20 +726,23 @@ if PYQT_AVAILABLE:
         def remove_client(self, username):
             """Retirer un client de la table"""
             for row in range(self.clients_table.rowCount()):
-                if self.clients_table.item(row, 1).text() == username:
-                    # Changer le statut en rouge
-                    status_item = QTableWidgetItem("●")
-                    status_item.setForeground(QColor("#f38ba8"))
-                    self.clients_table.setItem(row, 3, status_item)
+                if self.clients_table.item(row, 1) and self.clients_table.item(row, 1).text() == username:
+                    self.clients_table.removeRow(row)
+                    break
+                    
+        def remove_router(self, router_id):
+            """Retirer un routeur de la table"""
+            for row in range(self.routers_table.rowCount()):
+                if self.routers_table.item(row, 0) and self.routers_table.item(row, 0).text() == str(router_id):
+                    self.routers_table.removeRow(row)
                     break
                     
         def refresh_status(self):
             """Rafraîchir l'affichage du statut"""
-            if self.master.port:
-                self.master_info.setText(f"127.0.0.1:{self.master.port}")
+            self.master_info.setText(f"{self.master.host}:{self.master.port}")
                 
-        def closeEvent(self, event):
-            """Fermeture de la fenêtre"""
+        def stop_server(self):
+            """Arrêter le serveur"""
             reply = QMessageBox.question(
                 self, 'Confirmation',
                 'Êtes-vous sûr de vouloir arrêter le serveur Master ?',
@@ -688,9 +751,161 @@ if PYQT_AVAILABLE:
             
             if reply == QMessageBox.StandardButton.Yes:
                 self.master.stop()
-                event.accept()
-            else:
-                event.ignore()
+                self.close()
+                
+        def closeEvent(self, event):
+            """Fermeture de la fenêtre"""
+            self.stop_server()
+            event.accept()
+
+
+class MasterLoginWindow(QDialog):
+    """Fenêtre de configuration du serveur Master"""
+    
+    def __init__(self):
+        super().__init__()
+        self.host = None
+        self.port = None
+        self.init_ui()
+        
+    def init_ui(self):
+        self.setWindowTitle("Configuration du serveur Master")
+        self.setFixedSize(400, 400)
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #1e1e2e;
+            }
+            QLabel {
+                color: #cdd6f4;
+                font-size: 13px;
+            }
+            QLineEdit {
+                background-color: #313244;
+                border: 2px solid #45475a;
+                border-radius: 8px;
+                padding: 10px;
+                color: #cdd6f4;
+                font-size: 13px;
+            }
+            QLineEdit:focus {
+                border: 2px solid #89b4fa;
+            }
+            QPushButton {
+                background-color: #89b4fa;
+                color: #1e1e2e;
+                border: none;
+                border-radius: 8px;
+                padding: 12px;
+                font-weight: bold;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background-color: #74c7ec;
+            }
+            QPushButton:pressed {
+                background-color: #89dceb;
+            }
+        """)
+        
+        layout = QVBoxLayout()
+        layout.setSpacing(15)
+        layout.setContentsMargins(30, 30, 30, 30)
+        
+        # Titre
+        title = QLabel("Configuration du serveur Master")
+        title.setStyleSheet("font-size: 18px; font-weight: bold; color: #89b4fa;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+        
+        layout.addSpacing(20)
+        
+        # IP du serveur
+        ip_label = QLabel("Adresse IP du serveur :")
+        layout.addWidget(ip_label)
+        
+        self.ip_input = QLineEdit()
+        self.ip_input.setPlaceholderText("127.0.0.1")
+        self.ip_input.setText("127.0.0.1")
+        self.ip_input.setMinimumHeight(40)
+        layout.addWidget(self.ip_input)
+        
+        # Port du serveur
+        port_label = QLabel("Port du serveur :")
+        layout.addWidget(port_label)
+        
+        self.port_input = QLineEdit()
+        self.port_input.setPlaceholderText("6000")
+        self.port_input.setText("6000")
+        self.port_input.setMinimumHeight(40)
+        layout.addWidget(self.port_input)
+        
+        layout.addSpacing(20)
+        
+        # Information
+        info_label = QLabel("Note : Le serveur essayera les ports 6000-6002 et 7000 si le port spécifié est occupé.")
+        info_label.setStyleSheet("color: #bac2de; font-size: 11px; font-style: italic;")
+        info_label.setWordWrap(True)
+        layout.addWidget(info_label)
+        
+        layout.addSpacing(10)
+        
+        # Boutons
+        buttons_layout = QHBoxLayout()
+        
+        cancel_btn = QPushButton("Annuler")
+        cancel_btn.setMinimumHeight(45)
+        cancel_btn.clicked.connect(self.reject)
+        buttons_layout.addWidget(cancel_btn)
+        
+        start_btn = QPushButton("Démarrer le serveur")
+        start_btn.setMinimumHeight(45)
+        start_btn.clicked.connect(self.validate_and_start)
+        buttons_layout.addWidget(start_btn)
+        
+        layout.addLayout(buttons_layout)
+        
+        self.setLayout(layout)
+        
+        # Enter pour valider
+        self.ip_input.returnPressed.connect(self.validate_and_start)
+        self.port_input.returnPressed.connect(self.validate_and_start)
+        
+    def validate_ip(self, ip):
+        """Valide une adresse IPv4"""
+        try:
+            socket.inet_aton(ip)
+            return True
+        except socket.error:
+            return False
+            
+    def validate_and_start(self):
+        ip = self.ip_input.text().strip()
+        port_text = self.port_input.text().strip()
+        
+        # Validation IP
+        if ip == "":
+            ip = "127.0.0.1"
+        elif not self.validate_ip(ip):
+            QMessageBox.warning(self, "Erreur", "Adresse IP invalide")
+            return
+            
+        # Validation port
+        if not port_text:
+            QMessageBox.warning(self, "Erreur", "Veuillez entrer un port")
+            return
+            
+        try:
+            port = int(port_text)
+            if not (1 <= port <= 65535):
+                QMessageBox.warning(self, "Erreur", "Le port doit être entre 1 et 65535")
+                return
+        except ValueError:
+            QMessageBox.warning(self, "Erreur", "Le port doit être un nombre")
+            return
+            
+        self.host = ip
+        self.port = port
+        self.accept()
 
 # ---------- MAIN ----------
 def main():
@@ -713,13 +928,30 @@ def main():
         # ====== MODE SHELL ======
         print("\n[MASTER] Mode shell activé\n")
         
-        master_server = MasterServer(gui_mode=False)
+        # Demander l'IP et le port en mode shell
+        print("Configuration du serveur:")
+        host = input(f"Adresse IP (défaut: 127.0.0.1): ").strip()
+        if not host:
+            host = "127.0.0.1"
+        
+        port_input = input(f"Port (défaut: 6000): ").strip()
+        if not port_input:
+            port = 6000
+        else:
+            try:
+                port = int(port_input)
+            except ValueError:
+                print("Port invalide, utilisation du port 6000")
+                port = 6000
+        
+        master_server = MasterServer(gui_mode=False, host=host, port=port)
         
         if not master_server.start():
             print("[MASTER] ✗ Échec du démarrage du serveur")
             sys.exit(1)
         
-        print("\n[MASTER] Serveur en cours d'exécution...")
+        print(f"\n[MASTER] Serveur démarré sur {host}:{port}")
+        print("[MASTER] Serveur en cours d'exécution...")
         print("[MASTER] Appuyez sur Ctrl+C pour arrêter\n")
         
         try:
@@ -738,7 +970,8 @@ def main():
             print("[MASTER] Installez-le avec: pip install PyQt6")
             print("[MASTER] Basculement vers le mode shell...\n")
             
-            master_server = MasterServer(gui_mode=False)
+            # Mode shell avec paramètres par défaut
+            master_server = MasterServer(gui_mode=False, host="127.0.0.1", port=6000)
             
             if not master_server.start():
                 print("[MASTER] ✗ Échec du démarrage du serveur")
@@ -754,14 +987,28 @@ def main():
         
         print("\n[MASTER] Lancement de l'interface graphique...\n")
         
-        master_server = MasterServer(gui_mode=True)
+        # Afficher la fenêtre de configuration
+        app = QApplication(sys.argv)
+        login_window = MasterLoginWindow()
         
+        if login_window.exec() != QDialog.DialogCode.Accepted:
+            print("[MASTER] Configuration annulée")
+            sys.exit(0)
+        
+        # Récupérer les paramètres
+        host = login_window.host
+        port = login_window.port
+        
+        # Créer le serveur Master
+        master_server = MasterServer(gui_mode=True, host=host, port=port)
+        
+        # Démarrer le serveur
         if not master_server.start():
             print("[MASTER] ✗ Échec du démarrage du serveur")
+            QMessageBox.critical(None, "Erreur", f"Impossible de démarrer le serveur sur {host}:{port}")
             sys.exit(1)
         
-        # Créer l'application Qt
-        app = QApplication(sys.argv)
+        # Afficher la fenêtre principale
         window = MasterWindow(master_server)
         window.show()
         
