@@ -83,6 +83,75 @@ def get_db():
         print(f"[MASTER] X Database Error: {e}")
         return None
 
+def initialize_database():
+    """Créer les tables si elles n'existent pas"""
+    db = get_db()
+    if db:
+        cur = db.cursor()
+        try:
+            # Table routers
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS routers (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    ip VARCHAR(45) NOT NULL,
+                    port INT NOT NULL,
+                    e BIGINT NOT NULL,
+                    n BIGINT NOT NULL,
+                    d BIGINT NOT NULL,
+                    registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    UNIQUE KEY unique_router (ip, port)
+                )
+            """)
+            
+            # Table users
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    username VARCHAR(100) NOT NULL UNIQUE,
+                    ip VARCHAR(45) NOT NULL,
+                    port INT NOT NULL,
+                    public_key_e BIGINT NOT NULL,
+                    public_key_n BIGINT NOT NULL,
+                    is_online BOOLEAN DEFAULT FALSE,
+                    registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Table messages (optionnelle)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS messages (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    sender_username VARCHAR(100),
+                    receiver_username VARCHAR(100),
+                    encrypted_message TEXT,
+                    decrypted_message TEXT,
+                    path TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            # Table pour les connexions/routes
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS routes (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    route_id VARCHAR(50) NOT NULL,
+                    hops TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
+            db.commit()
+            print(f"[MASTER] Database tables created/verified")
+        except mariadb.Error as e:
+            print(f"[MASTER] X Database initialization error: {e}")
+            db.rollback()
+        finally:
+            db.close()
+    else:
+        print("[MASTER] /!\\ Could not connect to database for initialization")
+
 def clear_database_tables():
     """Nettoyer toutes les tables dans la base de données au lancement"""
     db = get_db()
@@ -389,6 +458,9 @@ class MasterServer:
             self.host = host
         if port:
             self.port = port
+        
+        # Initialiser la base de données (CRÉATION DES TABLES)
+        initialize_database()
         
         clear_database_tables()
         
