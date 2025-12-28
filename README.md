@@ -1,88 +1,151 @@
+# Chat routage en oignon
+
+Système de messagerie sécurisé avec routage en oignon et chiffrement RSA multi-couches.
+
+---
 ## Groupe
 
-Nom du groupe : Axolotl \
+Nom du groupe : Axolotl 
 Participants :
 - HOARAU Nolan
 - RABAH Soumaya
 
 ---
-## Socket
 
-Un **socket** est un point de communication qui permet à deux programmes (sur le même ordinateur ou sur des machines différentes) d’échanger des données par le réseau. En Python, tout se fait avec le module standard `socket`.
+##  Installation Rapide
 
-### Les bases
+### Linux/Debian
+```bash
+# Installer les dépendances
+sudo apt update
+sudo apt install -y libmariadb-dev python3-venv python3-dev build-essential mariadb-server
 
-*Pour un Serveur et un client :*
+# Créer l'environnement virtuel
+python3 -m venv venv
+source venv/bin/activate
 
-Serveur :
-```python
-import socket
-
-# Crée le socket du serveur
-serveur = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-serveur.bind(("localhost", 63000))  # Machine locale, port 63000
-serveur.listen(1)   # Attend 1 connexion
-
-print("Serveur en attente...")
-client_socket, adresse = serveur.accept()
-print("Connexion de", adresse)
-message = client_socket.recv(1024)  # Reçoit 1024 octets max
-print("Message recu:", message.decode())
-client_socket.close()
-serveur.close()
+# Installer les packages Python
+pip install -r requirements.txt
 ```
 
+### Windows
+1. Installer Python: https://www.python.org/downloads/
+2. Installer MariaDB: https://mariadb.org/download/
 
-| Fonctions / Méthodes | Description                                                               |
-| -------------------- | ------------------------------------------------------------------------- |
-| `socket.socket(...)` | créer le socket (TCP ou UDP)                                              |
-| `bind((ip, port))`   | elle contient un tuple qui associe le socket à une adresse/port (serveur) |
-| `listen(n)`          | attends une ou plusieurs connexions entrante                              |
-| `accept()`           | elle accepte la connexion entrante                                        |
-| `recv(n)`            | recoit des données avec `n` octets                                        |
-| `decode()`           | converti des octets (données binaires) en chaine de caractère (unicode)   |
-| `close()`            | ferme la connexion                                                        |
+```powershell
+# Créer l'environnement virtuel
+python -m venv venv
+venv\Scripts\activate
 
-Client :
-```python
-import socket
-
-client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client.connect(("localhost", 63000))   # Connecte sur machine locale, port 63000
-client.send(b"Salut le serveur !")
-client.close()
+# Installer les packages Python
+pip install -r requirements.txt
 ```
 
-| Fonctions / Méthodes | Description                                                               |
-| -------------------- | ------------------------------------------------------------------------- |
-| `connect()`          | elle contient un tuple pour se connecter à une addresse/port d'un serveur |
-| `send(b"data")`      | envoie des données en binaire (octets)                                    |
+## Configuration Base de Données
 
-Le module **socket** éhange des données sous forme d'octets (**données binaires**) et non de chaines de caractères donc on utilise `b"data"` pour envoyer des données binaire et la fonction `decode()` pour convertir ce message (en octets) en chaine de caractères (**unicode**).
+```bash
+# Se connecter à MariaDB
+mysql -u root -p
 
-| Serveur                                                                                                                 | CLient              |
-| ----------------------------------------------------------------------------------------------------------------------- | ------------------- |
-| $ python3 Server.py<br><br>Serveur en attente...<br>Connexion de ('127.0.0.1', 62674)<br>Message recu: salut le serveur | $ python3 Client.py |
-
-## Les Threads
-
-| Fonctions / Méthodes           | Description                                                        |
-| ------------------------------ | ------------------------------------------------------------------ |
-| `Thread(target=..., args=...)` | Crée un nouveau thread qui lancera une fonction avec des arguments |
-| `start()`                      | Démarre l’exécution du thread                                      |
-| `join()`                       | Attend que le thread se termine avant de continuer                 |
-| `current_thread()`             | Renvoie le thread en cours d’exécution                             |
-| `active_count()`               | Nombre de threads vivants actuellement                             |
-| `Lock()`                       | Crée un verrou pour synchroniser l’accès à une ressource partagée  |
-| `is_alive()`                   | Vérifie si un thread est encore en exécution                       |
-| `getName()/setName()`          | Donne ou change le nom d’un thread                                 |
-```python
-import threading
-
-def tache():
-    # ici la tache a faire
-
-mon_thread = threading.Thread(target=tache)
-mon_thread.start()
-mon_thread.join()
+# Exécuter ces commandes
+CREATE DATABASE routage_oignon;
+CREATE USER 'routage_user'@'localhost' IDENTIFIED BY 'wxcvbn%!';
+GRANT ALL PRIVILEGES ON routage_oignon.* TO 'routage_user'@'localhost';
+FLUSH PRIVILEGES;
+EXIT;
 ```
+
+## Démarrage
+
+**IMPORTANT: Démarrer dans cet ordre**
+
+### 1. Master Server (VM 1)
+```bash
+source venv/bin/activate  # Linux
+venv\Scripts\activate     # Windows
+
+python master.py
+# Choisir: 1 (GUI) ou 2 (CLI)
+```
+
+### 2. Routeurs (VM 2) - 3 recommandé ou plus
+ouvrir un routeur par terminal
+```bash
+source venv/bin/activate
+python router.py
+# Port: 5001, 5002, 5003...
+```
+
+### 3. Clients (VM 3/4/...)
+```bash
+source venv/bin/activate
+python client.py
+# Choisir: 1 (GUI) ou 2 (CLI)
+# Port: 7001, 7002...
+```
+
+## Utilisation
+
+### Mode GUI Client
+- Sélectionner un destinataire dans la liste
+- Taper votre message
+- choisir le nbr de couches
+- Cliquer "Envoyer"
+
+### Mode CLI
+```bash
+/list                    # Voir les utilisateurs en ligne
+/msg bob Salut Bob!      # Envoyer un message
+/quit                     # Quitter
+```
+
+## Dépannage Rapide
+
+**"Port already in use"**
+Vous pouvez choisir un autre port ou alors le stopper manuellement si souhaité :
+```bash
+# Linux
+sudo lsof -i :6000
+sudo kill -9 <PID>
+
+# Windows
+netstat -ano | findstr :6000
+taskkill /PID <PID> /F
+```
+
+**"Can't connect to database"**
+```bash
+# Linux
+sudo systemctl start mariadb
+
+# Windows - Services → MariaDB → Démarrer
+```
+
+**"Master not available"**
+- Vérifier que master.py est lancé
+- Vérifier l'IP et port
+- Vérifier la connexion entre les machines via un `ping`
+
+## Ports par Défaut
+
+| Composant | Port      |
+| --------- | --------- |
+| Master    | 6000      |
+| Routeurs  | 5001-5099 |
+| Clients   | 7001-7099 |
+
+## Architecture
+
+```
+CLIENT → ROUTEUR 1 → ROUTEUR 2 → ROUTEUR 3 → CLIENT
+         (déchiffre   (déchiffre   (déchiffre
+          couche 3)    couche 2)    couche 1)
+```
+
+Chaque message est chiffré en plusieurs couches. Chaque routeur ne déchiffre qu'une seule couche, garantissant l'anonymat.
+
+---
+## Vidéo
+
+Pour plus de detail vous pouvez regarder la video de demonstration
+https://www.youtube.com/watch?v=OQUEaK-J1Cs
