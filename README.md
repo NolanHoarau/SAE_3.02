@@ -5,7 +5,7 @@ Système de messagerie sécurisé avec routage en oignon et chiffrement RSA mult
 ---
 ## Groupe
 
-Nom du groupe : Axolotl 
+Nom du groupe : Axolotl \
 Participants :
 - HOARAU Nolan
 - RABAH Soumaya

@@ -1,8 +1,3 @@
-"""
-Onion Chat Client - Version Unifiée
-Combinaison de l'interface CLI et GUI en un seul programme
-"""
-
 import sys
 import socket
 import threading
