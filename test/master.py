@@ -560,7 +560,7 @@ if PYQT_AVAILABLE:
             self.timer.start(2000)  # Toutes les 2 secondes
             
         def init_ui(self):
-            self.setWindowTitle(f"🧅 Onion Routing - Master Server {self.master.host}:{self.master.port}")
+            self.setWindowTitle(f"Onion Routing - Master Server {self.master.host}:{self.master.port}")
             self.setGeometry(100, 100, 1200, 700)
             
             # Style identique au client
@@ -630,7 +630,7 @@ if PYQT_AVAILABLE:
             main_layout.setContentsMargins(15, 15, 15, 15)
             
             # En-tête
-            header = QLabel(f"🧅 ONION ROUTING - MASTER SERVER ({self.master.host}:{self.master.port})")
+            header = QLabel(f"ONION ROUTING - MASTER SERVER ({self.master.host}:{self.master.port})")
             header.setStyleSheet("font-size: 20px; font-weight: bold; color: #89b4fa;")
             header.setAlignment(Qt.AlignmentFlag.AlignCenter)
             main_layout.addWidget(header)
@@ -642,12 +642,12 @@ if PYQT_AVAILABLE:
             # Onglet Logs
             self.logs_tab = QWidget()
             self.init_logs_tab()
-            self.tabs.addTab(self.logs_tab, "📋 Logs")
+            self.tabs.addTab(self.logs_tab, "Logs")
             
             # Onglet Connexions
             self.connections_tab = QWidget()
             self.init_connections_tab()
-            self.tabs.addTab(self.connections_tab, "🔗 Connexions")
+            self.tabs.addTab(self.connections_tab, "Connexions")
             
         def init_logs_tab(self):
             """Initialiser l'onglet Logs"""
