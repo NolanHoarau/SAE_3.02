@@ -3,7 +3,6 @@ import threading
 import time
 import sys
 import signal
-import atexit
 
 # Configuration par défaut
 MASTER_IP = "127.0.0.1"
@@ -331,7 +330,7 @@ def main():
     # Sauvegarder les informations du master pour le cleanup
     master_ip_global = master_ip
     master_port_global = master_port
-
+    import atexit
     # Enregistrer les handlers de nettoyage
     atexit.register(cleanup_handler)
     signal.signal(signal.SIGINT, signal_handler)
